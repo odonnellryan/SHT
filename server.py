@@ -1,7 +1,6 @@
 import datetime
 import json
 import subprocess
-from time import sleep
 
 import dpkt
 import tornado.ioloop
@@ -20,29 +19,32 @@ def process_reader(cls, pcap_reader):
             break
 
         eth = dpkt.ethernet.Ethernet(pkt)
+
         if eth.type != dpkt.ethernet.ETH_TYPE_IP:
             continue
 
         parsed_packet = {
-            'timestamp': datetime.datetime.utcfromtimestamp(ts).isoformat(),
+            'timestamp': datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).isoformat(),
             'byte_data': eth.ip.tcp.data,
             'sending_port': eth.ip.tcp.sport,
             'receiving_port': eth.ip.tcp.dport,
         }
+
         cls.roaster.add_data_packet(Packet(**parsed_packet))
-        sleep(0.1)
 
 
 def monitor_tcpdump(cls):
     while cls.tcpdump_running:
+
         try:
             cls.tcpdump_process = subprocess.Popen(
                 ["tcpdump", "-i", "3", "-w", "-", "-U"],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                bufsize=1,
+                stderr=subprocess.DEVNULL
             )
-            pcap_reader = dpkt.pcap.Reader(cls.tcpdump_process.stdout)
+            std_out = cls.tcpdump_process.stdout
+
+            pcap_reader = dpkt.pcap.Reader(std_out)
             process_reader(cls, pcap_reader)
 
         except Exception as e:
@@ -69,25 +71,34 @@ class StreamHandler(tornado.websocket.WebSocketHandler):
     tcpdump_process = None
     tcpdump_running = True
 
+    def check_origin(self, origin):
+        return True
+
+    clients = set()
+
+    def open(self):
+        StreamHandler.clients.add(self)
+
     @classmethod
     def start_tcpdump(cls):
         cls.tcpdump_running = True
-        tornado.ioloop.IOLoop.current().run_in_executor(None, mock_stream_from_file, cls)
+        tornado.ioloop.IOLoop.current().run_in_executor(None, monitor_tcpdump, cls)
 
-    async def on_message(self, message):
+    def _handle_request(self, message):
         json_request = json.loads(message)
         if "command" in json_request and json_request["command"] == "getData":
-            latest_data = self.roaster.get_latest_for_artisan(json_request["id"])
-            json_response = json.dumps({
+            latest_data = self.roaster.get_latest_for_artisan()
+            resp = {
                 "id": json_request.get("id", None),
                 "data": latest_data
-            })
-            await self.write_message(json_response)
+            }
+            self.write_message(resp)
+
+    async def on_message(self, message):
+        self._handle_request(message)
 
     def on_close(self):
-        StreamHandler.tcpdump_running = False
-        if StreamHandler.tcpdump_process:
-            StreamHandler.tcpdump_process.terminate()
+        StreamHandler.clients.remove(self)
 
 
 def make_app():
@@ -102,8 +113,8 @@ def main():
         try:
             StreamHandler.start_tcpdump()
             app = make_app()
-            port = 8888
-            address = "0.0.0.0"  # Change to "127.0.0.1" to listen locally only
+            port = 60112
+            address = "0.0.0.0"
             app.listen(port, address)
             tornado.log.app_log.info(f"Tornado server started on {address}:{port}")
             tornado.ioloop.IOLoop.current().start()
@@ -113,6 +124,9 @@ def main():
             if StreamHandler.tcpdump_process:
                 StreamHandler.tcpdump_process.terminate()
             break
+        except OSError as e:
+            tornado.log.app_log.error(f"OS Error {e}, shutting down. ")
+            raise e
         except Exception as e:
             tornado.log.app_log.error(f"Error occurred: {e}. Restarting...")
 

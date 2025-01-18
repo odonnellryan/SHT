@@ -1,8 +1,4 @@
-dataclasses~=0.8
 dpkt~=1.9.8
 tornado~=6.1
-pandas~=1.4.2
-matplotlib~=3.5.1
 Adafruit-Blinka~=7.0.0
 adafruit-circuitpython-max31865~=2.2.0
-websockets~=10.0

@@ -2,12 +2,10 @@ import math
 from collections import deque
 from datetime import datetime
 
-import matplotlib
+import tornado.log
 from adafruit_max31865 import _RTD_A, _RTD_B
 
 from packet_utils import Packet
-
-matplotlib.use("TkAgg")
 
 
 def bytes_to_int_array(byte_sequence):
@@ -85,6 +83,8 @@ def decode_rtd_row(row, resistance_reference):
 
 def add_to_datapoints(cls, sensor_id, value):
     try:
+        # if sensor_id == 17:
+        #     tornado.log.app_log.info(f"Adding value {value} to sensor {sensor_id}, last value  {cls.mapper[sensor_id][-1] if cls.mapper[sensor_id] else None}")
         cls.mapper[sensor_id].append(value)
     except KeyError:
         return False
@@ -189,6 +189,7 @@ class SensorData:
                 if temp:
                     sensor_id = data_array[2]
                     v = add_to_datapoints(self, sensor_id, temp)
+
                     return v
 
         except IndexError:
@@ -221,20 +222,17 @@ class Roaster:
             """
         )
 
-    def get_latest_for_artisan(self, request_id):
+    def get_latest_for_artisan(self):
         return {
-            "id": request_id,
-            "data": {
-                'Drum': self.sensor_data.drum[-1] if self.sensor_data.drum else None,
-                'Exhaust': self.sensor_data.exhaust[-1] if self.sensor_data.exhaust else None,
-                'Storage': self.sensor_data.storage[-1] if self.sensor_data.storage else None,
-                'Cooling': self.sensor_data.cooling[-1] if self.sensor_data.cooling else None,
-                'Hot Air': self.sensor_data.hot_air[-1] if self.sensor_data.hot_air else None,
-                'IR': self.sensor_data.ir[-1] if self.sensor_data.ir else None,
-                'IR Ambient': self.sensor_data.ir_ambient[-1] if self.sensor_data.ir_ambient else None,
-                'Drum Heater': self.control_data.drum_heater[-1] if self.control_data.drum_heater else None,
-                'Hot Air Control': self.control_data.hot_air[-1] if self.control_data.hot_air else None,
-                'Halogen Control': self.control_data.halogen[-1] if self.control_data.halogen else None,
-                'Monitor Control': self.control_data.monitor[-1] if self.control_data.monitor else None,
-            }
+            'ET': round(self.sensor_data.storage[-1], 2) if self.sensor_data.storage else 0,
+            'BT': round(self.sensor_data.drum[-1], 2) if self.sensor_data.drum else 0,
+            'Hot Air': round(self.sensor_data.hot_air[-1], 2) if self.sensor_data.hot_air else 0,
+            'Exhaust': round(self.sensor_data.exhaust[-1], 2) if self.sensor_data.exhaust else 0,
+            'Cooling': round(self.sensor_data.cooling[-1], 2) if self.sensor_data.cooling else 0,
+            'IR': round(self.sensor_data.ir[-1], 2) if self.sensor_data.ir else 0,
+            'IR Ambient': round(self.sensor_data.ir_ambient[-1], 2) if self.sensor_data.ir_ambient else 0,
+            'Drum Heater': round(self.control_data.drum_heater[-1], 2) if self.control_data.drum_heater else 0,
+            'Hot Air Control': round(self.control_data.hot_air[-1], 2) if self.control_data.hot_air else 0,
+            'Halogen Control': round(self.control_data.halogen[-1], 2) if self.control_data.halogen else 0,
+            'Monitor Control': round(self.control_data.monitor[-1], 2) if self.control_data.monitor else 0,
         }
