@@ -174,6 +174,13 @@ def calculate_drum_steps(arry):
 MAX_QUEUE_SIZE = 30
 
 
+def get_continuation_index(sequence):
+    for i, v in enumerate(sequence):
+        if v == 14 and str(sequence[i + 1]).startswith('19'):
+            return i
+    return None
+
+
 class ControlData:
 
     def __init__(self):
@@ -189,6 +196,7 @@ class ControlData:
             (2, 77): self.monitor,
             (9, 32): self.drum_speed
         }
+        self._prev_val = None
 
     def __repr__(self):
         def format_last_values(data, n=5):
@@ -206,10 +214,17 @@ class ControlData:
     def add_datapoint_from_bytes(self, b):
         try:
             data_array = bytes_to_int_array(b)
+
             if data_array[0] == 9 and data_array[1] == 32:
                 self.drum_speed.append(calculate_drum_steps(data_array))
                 return
             control_sequences = get_control_sequences(data_array)
+            if not control_sequences or not control_sequences[0]:
+                if self._prev_val:
+                    start_index = get_continuation_index(data_array)
+                    data_array = self._prev_val + data_array[start_index:]
+                    control_sequences = get_control_sequences(data_array)
+            self._prev_val = data_array
             for c in control_sequences:
                 try:
                     key_bytes = (c[2], c[3])
@@ -260,6 +275,7 @@ class SensorData:
     def add_sensor_data(self, b):
         try:
             data_array = bytes_to_int_array(b)
+
             if data_array[0] == 20:
                 ir_temp = convert_ir_to_temperature(data_array)
                 if ir_temp and ir_temp <= 100:

@@ -4,7 +4,6 @@ import pandas as pd
 
 from data_classes import bytes_to_control_value, get_control_sequences
 
-
 file_path = "sent_carray.txt"
 
 with open(file_path, "r") as f:
@@ -56,12 +55,25 @@ check_seqs_neg = (
     (9, 32),
 )
 
+check_controls_all = [(2, 49)]
+for item in range(190, 200):
+    check_controls_all.append((14, item))
+
 check_seqs_pos = (
     (2, 51),
     # (2, 49),
     # (2, 50),
     # (2, 77),
 )
+
+
+def find_series_start(lst):
+    try:
+        if len(lst) >= 3 and lst[0] == 14 and (lst[2] > 51 or (lst[2] == 2 and lst[3] == 49)):
+            return True
+        return False
+    except IndexError:
+        return False
 
 
 def check_starts_with_seq(lst, seqs):
@@ -83,14 +95,15 @@ def get_first_control_value(arry):
     except IndexError:
         return None
 
+# drop all rows not in this index: .iloc[9370:9400]
 
 df['ControlValue'] = df['Packet'].apply(
     lambda x: get_first_control_value(x) if not isinstance(x, Exception) else None)
 
 # drop rows where ControlValue is nan:
-# df = df.dropna(subset=['ControlValue'])
+df = df.dropna(subset=['ControlValue'])
 
-counts = df['OnlySomePackets'].value_counts()
+# counts = df['OnlySomePackets'].value_counts()
 
 pass
 
