@@ -90,7 +90,7 @@ filtered_df = filtered_df.dropna(subset=['FirstNBytes'])
 
 counts = filtered_df['FirstNBytes'].value_counts()
 
-filtered_df['controlSeqs'] = filtered_df['Packet'].apply(lambda x: list(x)[2:])
+filtered_df['controlSeqs'] = filtered_df['Packet'].apply(lambda x: list(x))
 
 filtered_df['ControlValue'] = filtered_df['controlSeqs'].apply(
     lambda x: bytes_to_control_value(x) if not isinstance(x, Exception) else None)

@@ -38,7 +38,7 @@ def monitor_tcpdump(cls):
 
         try:
             cls.tcpdump_process = subprocess.Popen(
-                ["tcpdump", "-i", "3", "-w", "-", "-U"],
+                ["tcpdump", "-i", "3", "-w", "-"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL
             )
@@ -55,7 +55,7 @@ def monitor_tcpdump(cls):
 
 
 def mock_stream_from_file(cls):
-    filename = "test_stream.pcap"
+    filename = "reference_files/tcp.pcap"
     while cls.tcpdump_running:
         try:
             with open(filename, "rb") as f:
@@ -82,7 +82,7 @@ class StreamHandler(tornado.websocket.WebSocketHandler):
     @classmethod
     def start_tcpdump(cls):
         cls.tcpdump_running = True
-        tornado.ioloop.IOLoop.current().run_in_executor(None, monitor_tcpdump, cls)
+        tornado.ioloop.IOLoop.current().run_in_executor(None, mock_stream_from_file, cls)
 
     def _handle_request(self, message):
         json_request = json.loads(message)

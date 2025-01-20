@@ -2,10 +2,71 @@ import math
 from collections import deque
 from datetime import datetime
 
-import tornado.log
 from adafruit_max31865 import _RTD_A, _RTD_B
 
 from packet_utils import Packet
+
+
+def check_for_second_sequence(sub_sequence):
+    for i, n in enumerate(sub_sequence):
+        if i == 0:
+            continue
+        try:
+            first, second = n, sub_sequence[i + 1]
+        except IndexError:
+            return None
+        if first == 14 and str(second).startswith('19'):
+            return i
+    return None
+
+
+def get_second_sequence_indexes_if_exists(sub_sequence, check_sequences):
+    first_exists = False
+    for i, sequence in enumerate(check_sequences):
+        for j in range(len(sub_sequence) - 1):
+            if first_exists:
+                index = check_for_second_sequence(sub_sequence)
+                if index is not None:
+                    return index
+            if sequence[0] == sub_sequence[j] and sequence[1] == sub_sequence[j + 1]:
+                first_exists = True
+    return None
+
+
+def get_control_sequences(values):
+    sequence_checkers = (
+        (2, 51),
+        (2, 49),
+        (2, 50),
+        (2, 77),
+    )
+    sub_sequences = []
+    try:
+        for i, v in enumerate(values):
+            for sequence in sequence_checkers:
+                if v == sequence[0] and values[i + 1] == sequence[1]:
+                    stop_index = 7
+                    sub_val = values[i - 2:i + 6]
+                    try:
+                        error_byte = values[i + 6]
+                    except IndexError:
+                        error_byte = None
+                    if error_byte == 3:
+                        sub_val.append(error_byte)
+                        stop_index += 1
+                    index = get_second_sequence_indexes_if_exists(sub_val, sequence_checkers)
+                    if index is not None:
+                        first_index = index
+                        sub_val.pop(first_index)
+                        sub_val.pop(first_index)
+                        sub_val.append(values[i + 6])
+                        sub_val.append(values[i + 7])
+                        pass
+                    sub_sequences.append(sub_val)
+                    values = values[i + stop_index:]
+    except IndexError:
+        return sub_sequences
+    return [sub_sequences]
 
 
 def bytes_to_int_array(byte_sequence):
@@ -13,12 +74,18 @@ def bytes_to_int_array(byte_sequence):
 
 
 def bytes_to_control_value(byte_sequence):
-    if not byte_sequence or len(byte_sequence) < 4:
+    # remove "stop" byte - but strangely it is not always there...
+    if byte_sequence[-1] == 3:
+        byte_sequence.pop()
+    if not byte_sequence or len(byte_sequence) < 6:
         return None
-    core_bytes = byte_sequence[2:-3]
+    try:
+        core_bytes = byte_sequence[4:6]
+    except IndexError:
+        return 0
     try:
         return [int(bytes(core_bytes[i:i + 2]).decode(), 16) for i in range(0, len(core_bytes), 2)][0]
-    except Exception:
+    except Exception as e:
         return None
 
 
@@ -83,12 +150,25 @@ def decode_rtd_row(row, resistance_reference):
 
 def add_to_datapoints(cls, sensor_id, value):
     try:
-        # if sensor_id == 17:
-        #     tornado.log.app_log.info(f"Adding value {value} to sensor {sensor_id}, last value  {cls.mapper[sensor_id][-1] if cls.mapper[sensor_id] else None}")
         cls.mapper[sensor_id].append(value)
     except KeyError:
         return False
     return True
+
+
+def calculate_drum_steps(arry):
+    try:
+        first, second = f"{arry[2]:02X}", f"{arry[3]:02X}"
+        value = int(f"{first}{second}", 16)
+    except IndexError:
+        return None
+
+    start_value = 63274
+    step_size = 6140
+    val = ((start_value - value) // step_size) + 2
+    if val > 10:
+        return 1
+    return val
 
 
 MAX_QUEUE_SIZE = 30
@@ -101,11 +181,13 @@ class ControlData:
         self.hot_air = deque(maxlen=MAX_QUEUE_SIZE)
         self.halogen = deque(maxlen=MAX_QUEUE_SIZE)
         self.monitor = deque(maxlen=MAX_QUEUE_SIZE)
+        self.drum_speed = deque(maxlen=MAX_QUEUE_SIZE)
         self.mapper = {
             (2, 51): self.drum_heater,
             (2, 49): self.hot_air,
             (2, 50): self.halogen,
-            (2, 77): self.monitor
+            (2, 77): self.monitor,
+            (9, 32): self.drum_speed
         }
 
     def __repr__(self):
@@ -124,14 +206,20 @@ class ControlData:
     def add_datapoint_from_bytes(self, b):
         try:
             data_array = bytes_to_int_array(b)
-            data_array = data_array[2:]
-            key_bytes = (data_array[0], data_array[1])
-            control_value = bytes_to_control_value(data_array)
-            if control_value:
-                return add_to_datapoints(self, key_bytes, control_value)
+            if data_array[0] == 9 and data_array[1] == 32:
+                self.drum_speed.append(calculate_drum_steps(data_array))
+                return
+            control_sequences = get_control_sequences(data_array)
+            for c in control_sequences:
+                try:
+                    key_bytes = (c[2], c[3])
+                except IndexError:
+                    continue
+                control_value = bytes_to_control_value(c)
+                if control_value is not None:
+                    return add_to_datapoints(self, key_bytes, control_value)
         except IndexError:
             pass
-        return False
 
 
 class SensorData:
@@ -235,4 +323,5 @@ class Roaster:
             'Hot Air Control': round(self.control_data.hot_air[-1], 2) if self.control_data.hot_air else 0,
             'Halogen Control': round(self.control_data.halogen[-1], 2) if self.control_data.halogen else 0,
             'Monitor Control': round(self.control_data.monitor[-1], 2) if self.control_data.monitor else 0,
+            'Drum': round(self.control_data.drum_speed[-1], 2) if self.control_data.drum_speed else 0,
         }
