@@ -2,9 +2,11 @@ import re
 
 import pandas as pd
 
-from data_classes import bytes_to_control_value, get_control_sequences
+from src.shtmobile.data_classes import get_control_sequences, bytes_to_control_value, decode_rtd_row
 
-file_path = "sent_carray.txt"
+# from src.shtmobile.data_classes import bytes_to_control_value, get_control_sequences
+
+file_path = "received_carray.txt"
 
 with open(file_path, "r") as f:
     raw_data = f.read()
@@ -60,7 +62,7 @@ for item in range(190, 200):
     check_controls_all.append((14, item))
 
 check_seqs_pos = (
-    (2, 51),
+    (17, 129, 18),
     # (2, 49),
     # (2, 50),
     # (2, 77),
@@ -95,10 +97,11 @@ def get_first_control_value(arry):
     except IndexError:
         return None
 
+
 # drop all rows not in this index: .iloc[9370:9400]
 
 df['ControlValue'] = df['Packet'].apply(
-    lambda x: get_first_control_value(x) if not isinstance(x, Exception) else None)
+    lambda x: decode_rtd_row(x, 400) if not isinstance(x, Exception) else None)
 
 # drop rows where ControlValue is nan:
 df = df.dropna(subset=['ControlValue'])

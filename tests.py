@@ -7,7 +7,7 @@ import sys
 
 async def test():
     # uri = "ws://192.168.1.224:60112/"
-    uri = "ws://localhost:60112/"
+    uri = "ws://172.21.112.1:60114/"
     try:
         async with websockets.connect(uri) as websocket:
             while True:

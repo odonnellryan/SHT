@@ -1,6 +1,9 @@
 import datetime
 import json
+import os
 import subprocess
+import threading
+import time
 
 import dpkt
 import tornado.ioloop
@@ -8,8 +11,12 @@ import tornado.log
 import tornado.web
 import tornado.websocket
 
-from data_classes import Roaster
-from packet_utils import Packet
+try:
+    from shtmobile.data_classes import Roaster
+    from shtmobile.packet_utils import Packet
+except ImportError:
+    from src.shtmobile.data_classes import Roaster
+    from src.shtmobile.packet_utils import Packet
 
 
 def process_reader(cls, pcap_reader):
@@ -38,7 +45,7 @@ def monitor_tcpdump(cls):
 
         try:
             cls.tcpdump_process = subprocess.Popen(
-                ["tcpdump", "-i", "3", "-w", "-"],
+                ["su", "-c", "tcpdump", "-i", "3", "-w", "-"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL
             )
@@ -54,16 +61,40 @@ def monitor_tcpdump(cls):
                 cls.tcpdump_process.terminate()
 
 
-def mock_stream_from_file(cls):
-    filename = "reference_files/tcp.pcap"
-    while cls.tcpdump_running:
-        try:
-            with open(filename, "rb") as f:
-                pcap_reader = dpkt.pcap.Reader(f)
-                process_reader(cls, pcap_reader)
-            print("End of file reached. Restarting...")
-        except Exception as e:
-            print(f"Error reading file: {e}")
+def write_packets_to_file(file_path):
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    def monitor_file_size(process, file_path):
+        while process.poll() is None:  # Continue while the process is running
+            if os.path.getsize(file_path) > 2 * 1024 * 1024:  # 2 MB in bytes
+                process.terminate()
+                break
+            time.sleep(0.1)  # Check file size periodically
+
+    with open(file_path, 'wb') as file:
+        tcpdump_process = subprocess.Popen(
+            ["su", "-c", "tcpdump", "-i", "3", "-w", "-"],
+            stdout=file,
+            stderr=subprocess.DEVNULL
+        )
+        threading.Thread(
+            target=monitor_file_size,
+            args=(tcpdump_process, file_path),
+            daemon=True
+        ).start()
+
+    return tcpdump_process
+
+
+# def mock_stream_from_file(cls):
+#     filename = "/src/shtmobile/tcp.pcap"
+#     while cls.tcpdump_running:
+#         try:
+#             with open(filename, "rb") as f:
+#                 pcap_reader = dpkt.pcap.Reader(f)
+#                 process_reader(cls, pcap_reader)
+#             print("End of file reached. Restarting...")
+#         except Exception as e:
+#             print(f"Error reading file: {e}")
 
 
 class StreamHandler(tornado.websocket.WebSocketHandler):
@@ -82,7 +113,7 @@ class StreamHandler(tornado.websocket.WebSocketHandler):
     @classmethod
     def start_tcpdump(cls):
         cls.tcpdump_running = True
-        tornado.ioloop.IOLoop.current().run_in_executor(None, mock_stream_from_file, cls)
+        tornado.ioloop.IOLoop.current().run_in_executor(None, monitor_tcpdump, cls)
 
     def _handle_request(self, message):
         json_request = json.loads(message)
@@ -123,6 +154,7 @@ def main():
             StreamHandler.tcpdump_running = False
             if StreamHandler.tcpdump_process:
                 StreamHandler.tcpdump_process.terminate()
+            tornado.ioloop.IOLoop.current().stop()
             break
         except OSError as e:
             tornado.log.app_log.error(f"OS Error {e}, shutting down. ")

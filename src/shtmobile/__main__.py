@@ -1,4 +1,4 @@
-from sht.app import main
+from shtmobile.app import main
 
 if __name__ == "__main__":
     main().main_loop()

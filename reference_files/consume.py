@@ -1,8 +1,8 @@
 import asyncio
 import re
 
-from data_classes import Roaster
-from packet_utils import parse_packet
+from src.shtmobile.data_classes import Roaster
+from src.shtmobile.packet_utils import parse_packet
 
 
 async def fetch_tcpdump():

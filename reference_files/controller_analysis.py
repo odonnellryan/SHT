@@ -1,5 +1,5 @@
 import get_data
-from data_classes import bytes_to_control_value, ControlData
+from src.shtmobile.data_classes import bytes_to_control_value, ControlData
 
 df = get_data.get_data_sent()
 

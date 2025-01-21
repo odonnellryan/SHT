@@ -2,9 +2,14 @@ import math
 from collections import deque
 from datetime import datetime
 
-from adafruit_max31865 import _RTD_A, _RTD_B
+_RTD_A = 3.9083e-3
+_RTD_B = -5.775e-7
 
-from packet_utils import Packet
+try:
+    from shtmobile.packet_utils import Packet
+except ImportError:
+    from src.shtmobile.packet_utils import Packet
+
 
 
 def check_for_second_sequence(sub_sequence):

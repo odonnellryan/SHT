@@ -1,22 +1,27 @@
 # This project was generated with 0.3.20 using template: https://github.com/beeware/briefcase-template@v0.3.20
 [tool.briefcase]
 project_name = "SHT"
-bundle = "com.sht"
+bundle = "com.shtmobile"
 version = "0.0.1"
 url = "https://luma.im/"
 license.file = "LICENSE"
 author = "ross()"
 author_email = "ryan@luma.im"
 
-[tool.briefcase.app.sht]
+[tool.briefcase.app.shtmobile]
 formal_name = "SHT"
 description = "SHT: Strong Hold Telephone"
-long_description = """More details about the app should go here.
-"""
+long_description = """...."""
 sources = [
-    "sht/src/sht",
+    "src/shtmobile",
 ]
 test_sources = [
     "tests",
 ]
 
+requires = [
+    "toga-android",
+    "tornado",
+    "dpkt",
+    "scapy"
+]

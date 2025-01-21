@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 import get_data
-from data_classes import convert_ir_to_temperature, decode_rtd_row
+from src.shtmobile.data_classes import convert_ir_to_temperature, decode_rtd_row
 
 df = get_data.get_data_received()
 
