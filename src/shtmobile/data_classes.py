@@ -224,7 +224,6 @@ class ControlData:
 
             if data_array[0] == 9 and data_array[1] == 32 and not (control_sequences and control_sequences[0]):
                 drum_steps = calculate_drum_steps(data_array)
-                print(drum_steps)
                 self.drum_speed.append(drum_steps)
                 return
 
