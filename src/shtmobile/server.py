@@ -86,7 +86,7 @@ def write_packets_to_file(file_path):
 
 
 # def mock_stream_from_file(cls):
-#     filename = "/src/shtmobile/tcp.pcap"
+#     filename = "../../reference_files/tcp.pcap"
 #     while cls.tcpdump_running:
 #         try:
 #             with open(filename, "rb") as f:

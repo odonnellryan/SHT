@@ -2,11 +2,12 @@ import re
 
 import pandas as pd
 
-from src.shtmobile.data_classes import get_control_sequences, bytes_to_control_value, decode_rtd_row
+from src.shtmobile.data_classes import get_control_sequences, bytes_to_control_value, decode_rtd_row, \
+    calculate_drum_steps
 
 # from src.shtmobile.data_classes import bytes_to_control_value, get_control_sequences
 
-file_path = "received_carray.txt"
+file_path = "drumsettings.txt"
 
 with open(file_path, "r") as f:
     raw_data = f.read()
@@ -68,6 +69,9 @@ check_seqs_pos = (
     # (2, 77),
 )
 
+def is_drum(lst):
+    if lst[0] == 9:
+        return True
 
 def find_series_start(lst):
     try:
@@ -83,7 +87,7 @@ def check_starts_with_seq(lst, seqs):
 
 
 df['OnlySomePackets'] = df["Packet"].apply(
-    lambda x: x if isinstance(x, list) and is_contain_list_of_sequences(x, check_seqs_pos) else None
+    lambda x: x if isinstance(x, list) and is_drum(x) else None
 )
 df = df.dropna(subset=['OnlySomePackets'])
 
@@ -101,7 +105,7 @@ def get_first_control_value(arry):
 # drop all rows not in this index: .iloc[9370:9400]
 
 df['ControlValue'] = df['Packet'].apply(
-    lambda x: decode_rtd_row(x, 400) if not isinstance(x, Exception) else None)
+    lambda x: calculate_drum_steps(x) if not isinstance(x, Exception) else None)
 
 # drop rows where ControlValue is nan:
 df = df.dropna(subset=['ControlValue'])

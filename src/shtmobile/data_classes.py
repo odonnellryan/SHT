@@ -11,7 +11,6 @@ except ImportError:
     from src.shtmobile.packet_utils import Packet
 
 
-
 def check_for_second_sequence(sub_sequence):
     for i, n in enumerate(sub_sequence):
         if i == 0:
@@ -164,6 +163,8 @@ def add_to_datapoints(cls, sensor_id, value):
 def calculate_drum_steps(arry):
     try:
         first, second = f"{arry[2]:02X}", f"{arry[3]:02X}"
+        if first == 0 and second == 0:
+            return 0
         value = int(f"{first}{second}", 16)
     except IndexError:
         return None
@@ -198,8 +199,7 @@ class ControlData:
             (2, 51): self.drum_heater,
             (2, 49): self.hot_air,
             (2, 50): self.halogen,
-            (2, 77): self.monitor,
-            (9, 32): self.drum_speed
+            (2, 77): self.monitor
         }
         self._prev_val = None
 
@@ -220,15 +220,20 @@ class ControlData:
         try:
             data_array = bytes_to_int_array(b)
 
-            if data_array[0] == 9 and data_array[1] == 32:
-                self.drum_speed.append(calculate_drum_steps(data_array))
-                return
             control_sequences = get_control_sequences(data_array)
+
+            if data_array[0] == 9 and data_array[1] == 32 and not (control_sequences and control_sequences[0]):
+                drum_steps = calculate_drum_steps(data_array)
+                print(drum_steps)
+                self.drum_speed.append(drum_steps)
+                return
+
             if not control_sequences or not control_sequences[0]:
                 if self._prev_val:
                     start_index = get_continuation_index(data_array)
                     data_array = self._prev_val + data_array[start_index:]
                     control_sequences = get_control_sequences(data_array)
+
             self._prev_val = data_array
             for c in control_sequences:
                 try:
@@ -344,5 +349,5 @@ class Roaster:
             'Hot Air Control': round(self.control_data.hot_air[-1], 2) if self.control_data.hot_air else 0,
             'Halogen Control': round(self.control_data.halogen[-1], 2) if self.control_data.halogen else 0,
             'Monitor Control': round(self.control_data.monitor[-1], 2) if self.control_data.monitor else 0,
-            'Drum': round(self.control_data.drum_speed[-1], 2) if self.control_data.drum_speed else 0,
+            'Drum Speed': round(self.control_data.drum_speed[-1], 2) if self.control_data.drum_speed else 0,
         }
