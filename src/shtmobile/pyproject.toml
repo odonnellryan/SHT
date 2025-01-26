@@ -15,6 +15,8 @@ long_description = """..."""
 sources = [
     "src/shtmobile",
 ]
+resources = ["src/shtmobile/resources"]
+
 test_sources = [
     "tests",
 ]
@@ -129,14 +131,9 @@ system_runtime_requires = [
 manylinux = "manylinux_2_28"
 
 system_requires = [
-    # Needed to compile pycairo wheel
     "cairo-gobject-devel",
-    # Needed to compile PyGObject wheel
     "gobject-introspection-devel",
-    # Needed to provide GTK
     "gtk3-devel",
-    # Dependencies that GTK looks for at runtime, that need to be
-    # in the build environment to be picked up by linuxdeploy
     "libcanberra-gtk3",
     "PackageKit-gtk3-module",
     "gvfs-client",
@@ -175,13 +172,8 @@ base_theme = "Theme.MaterialComponents.Light.DarkActionBar"
 
 build_gradle_dependencies = [
     "com.google.android.material:material:1.12.0",
-    # Needed for DetailedList
-    # "androidx.swiperefreshlayout:swiperefreshlayout:1.1.0",
-    # Needed for MapView
-    # "org.osmdroid:osmdroid-android:6.1.20",
 ]
 
-# Web deployments
 [tool.briefcase.app.shtmobile.web]
 requires = [
     "toga-web~=0.4.7",

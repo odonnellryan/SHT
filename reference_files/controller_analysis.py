@@ -1,9 +1,9 @@
 import get_data
 from src.shtmobile.data_classes import bytes_to_control_value, ControlData
 
-df = get_data.get_data_sent()
+# df = get_data.get_data_sent()
 
-filtered_by_third = df[df['Packet'].str[2] == 77]
+# filtered_by_third = df[df['Packet'].str[2] == 77]
 
 
 def conv_bytes_to_data(linked_list):
@@ -71,28 +71,28 @@ def conv_set_band_bytes(i):
 def bytes_to_c_array(byte_sequence):
     return ", ".join(f"0x{byte:02X}" for byte in byte_sequence)
 
-hab = conv_set_hot_air_bytes(10)
-
-cd = ControlData()
-
-cd.add_datapoint_from_bytes(bytes([14, 198, 2, 49, 50, 68, 65, 55, 3]))
-cd.add_datapoint_from_bytes(bytes([14, 198, 2, 49, 48, 70, 65, 55, 3]))
-cd.add_datapoint_from_bytes(bytes([14, 198, 2, 50, 54, 48, 57, 56, 3]))
-
-allowed_sequences = [(14, 190), (14, 191), (14, 192), (14, 193), (14, 194), (14, 195), (14, 196), (14, 197), (14, 198),
-                     (14, 199)]
-
-filtered_df = df[df['Packet'].apply(lambda x: tuple(x[:len(allowed_sequences[0])]) in allowed_sequences)]
-
-filtered_df['FirstNBytes'] = filtered_df['Packet'].apply(lambda x: tuple(x[:4]) if len(x) >= 2 else None)
-
-filtered_df = filtered_df.dropna(subset=['FirstNBytes'])
-
-counts = filtered_df['FirstNBytes'].value_counts()
-
-filtered_df['controlSeqs'] = filtered_df['Packet'].apply(lambda x: list(x))
-
-filtered_df['ControlValue'] = filtered_df['controlSeqs'].apply(
-    lambda x: bytes_to_control_value(x) if not isinstance(x, Exception) else None)
-
-pass
+# hab = conv_set_hot_air_bytes(10)
+#
+# cd = ControlData()
+#
+# cd.add_datapoint_from_bytes(bytes([14, 198, 2, 49, 50, 68, 65, 55, 3]))
+# cd.add_datapoint_from_bytes(bytes([14, 198, 2, 49, 48, 70, 65, 55, 3]))
+# cd.add_datapoint_from_bytes(bytes([14, 198, 2, 50, 54, 48, 57, 56, 3]))
+#
+# allowed_sequences = [(14, 190), (14, 191), (14, 192), (14, 193), (14, 194), (14, 195), (14, 196), (14, 197), (14, 198),
+#                      (14, 199)]
+#
+# filtered_df = df[df['Packet'].apply(lambda x: tuple(x[:len(allowed_sequences[0])]) in allowed_sequences)]
+#
+# filtered_df['FirstNBytes'] = filtered_df['Packet'].apply(lambda x: tuple(x[:4]) if len(x) >= 2 else None)
+#
+# filtered_df = filtered_df.dropna(subset=['FirstNBytes'])
+#
+# counts = filtered_df['FirstNBytes'].value_counts()
+#
+# filtered_df['controlSeqs'] = filtered_df['Packet'].apply(lambda x: list(x))
+#
+# filtered_df['ControlValue'] = filtered_df['controlSeqs'].apply(
+#     lambda x: bytes_to_control_value(x) if not isinstance(x, Exception) else None)
+#
+# pass

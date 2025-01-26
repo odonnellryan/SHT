@@ -7,8 +7,11 @@ _RTD_B = -5.775e-7
 
 try:
     from shtmobile.packet_utils import Packet
-except ImportError:
-    from src.shtmobile.packet_utils import Packet
+except Exception:
+    try:
+        from packet_utils import Packet
+    except ImportError:
+        from src.shtmobile.packet_utils import Packet
 
 
 def check_for_second_sequence(sub_sequence):
@@ -65,7 +68,6 @@ def get_control_sequences(values):
                         sub_val.pop(first_index)
                         sub_val.append(values[i + 6])
                         sub_val.append(values[i + 7])
-                        pass
                     sub_sequences.append(sub_val)
                     values = values[i + stop_index:]
     except IndexError:
@@ -180,11 +182,14 @@ def calculate_drum_steps(arry):
 MAX_QUEUE_SIZE = 30
 
 
-def get_continuation_index(sequence):
+def get_continuation_array(sequence, prior_array):
     for i, v in enumerate(sequence):
         if v == 14 and str(sequence[i + 1]).startswith('19'):
-            return i
-    return None
+            if (len(prior_array) > 3 and prior_array[2]) != 2 and sequence[i + 2] != 2:
+                new_seq = sequence[i:2] + [2] + sequence[i + 2:]
+                return new_seq
+            return sequence[i:]
+    return []
 
 
 class ControlData:
@@ -216,34 +221,48 @@ class ControlData:
             f")"
         )
 
-    def add_datapoint_from_bytes(self, b):
+    def get_datapoint_and_control_value(self, data_array):
         try:
-            data_array = bytes_to_int_array(b)
-
+            data_array = bytes_to_int_array(data_array)
             control_sequences = get_control_sequences(data_array)
 
             if data_array[0] == 9 and data_array[1] == 32 and not (control_sequences and control_sequences[0]):
                 drum_steps = calculate_drum_steps(data_array)
                 self.drum_speed.append(drum_steps)
-                return
+                return []
 
             if not control_sequences or not control_sequences[0]:
                 if self._prev_val:
-                    start_index = get_continuation_index(data_array)
-                    data_array = self._prev_val + data_array[start_index:]
+                    data_array = get_continuation_array(data_array, self._prev_val)
+                    data_array = self._prev_val + data_array
                     control_sequences = get_control_sequences(data_array)
 
-            self._prev_val = data_array
+            if data_array[0] == 14:
+                self._prev_val = data_array
+
+            rv = []
             for c in control_sequences:
                 try:
                     key_bytes = (c[2], c[3])
                 except IndexError:
-                    continue
-                control_value = bytes_to_control_value(c)
-                if control_value is not None:
-                    return add_to_datapoints(self, key_bytes, control_value)
+                    return []
+                rv.append((key_bytes, bytes_to_control_value(c)))
+            try:
+                if rv and any([r[1] is not None for r in rv]):
+                    self._prev_val = None
+            except IndexError:
+                pass
+            return rv
+
         except IndexError:
             pass
+
+        return []
+
+    def add_datapoint_from_bytes(self, b):
+        for key_bytes, control_value in self.get_datapoint_and_control_value(b):
+            if control_value is not None:
+                return add_to_datapoints(self, key_bytes, control_value)
 
 
 class SensorData:
@@ -319,6 +338,15 @@ class Roaster:
     def __init__(self):
         self.control_data = ControlData()
         self.sensor_data = SensorData()
+
+    def has_dropped_roast(self):
+        ir_temp = self.sensor_data.ir
+
+        if ir_temp[-1] < 120:
+            return False
+
+        if len(ir_temp) < ir_temp.maxlen:
+            return False
 
     def add_data_packet(self, data_packet: Packet):
         if data_packet.is_sending:

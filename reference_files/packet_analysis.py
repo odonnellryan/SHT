@@ -2,12 +2,12 @@ import re
 
 import pandas as pd
 
-from src.shtmobile.data_classes import get_control_sequences, bytes_to_control_value, decode_rtd_row, \
-    calculate_drum_steps
+from reference_files.controller_analysis import conv_set_band_bytes, conv_bytes_to_data
+from src.shtmobile.data_classes import ControlData, bytes_to_control_value
 
 # from src.shtmobile.data_classes import bytes_to_control_value, get_control_sequences
 
-file_path = "drumsettings.txt"
+file_path = "sent_controls.txt"
 
 with open(file_path, "r") as f:
     raw_data = f.read()
@@ -62,16 +62,15 @@ check_controls_all = [(2, 49)]
 for item in range(190, 200):
     check_controls_all.append((14, item))
 
-check_seqs_pos = (
-    (17, 129, 18),
-    # (2, 49),
-    # (2, 50),
-    # (2, 77),
+sequence_checkers = (
+    (2, 50),
 )
+
 
 def is_drum(lst):
     if lst[0] == 9:
         return True
+
 
 def find_series_start(lst):
     try:
@@ -86,32 +85,56 @@ def check_starts_with_seq(lst, seqs):
     return any([lst[:len(seq)] == list(seq) for seq in seqs])
 
 
-df['OnlySomePackets'] = df["Packet"].apply(
-    lambda x: x if isinstance(x, list) and is_drum(x) else None
-)
-df = df.dropna(subset=['OnlySomePackets'])
-
-pass
+# df['OnlySomePackets'] = df["Packet"].apply(
+#     lambda x: x if isinstance(x, list) and x[0] not in (17, 20, 4) else None
+# )
+# df = df.dropna(subset=['OnlySomePackets'])
 
 
-def get_first_control_value(arry):
-    control_sequences = get_control_sequences(arry)
-    try:
-        return bytes_to_control_value(control_sequences[0])
-    except IndexError:
-        return None
-
+c = ControlData()
 
 # drop all rows not in this index: .iloc[9370:9400]
 
+def get_control_value(x):
+    try:
+        cv = c.get_datapoint_and_control_value(x)[0]
+    except Exception:
+        return None
+    if cv and cv[0] and 51 in cv[0]:
+        return cv
+    return None
+
+
+def bytes_to_control_value(byte_sequence):
+    if byte_sequence[-1] == 3:
+        byte_sequence.pop()
+    if not byte_sequence or len(byte_sequence) < 6:
+        return None
+    try:
+        core_bytes = byte_sequence[4:6]
+    except IndexError:
+        return 0
+    try:
+        return [int(bytes(core_bytes[i:i + 2]).decode(), 16) for i in range(0, len(core_bytes), 2)][0]
+    except Exception as e:
+        return None
+
+
 df['ControlValue'] = df['Packet'].apply(
-    lambda x: calculate_drum_steps(x) if not isinstance(x, Exception) else None)
+    lambda x: get_control_value(x))
 
 # drop rows where ControlValue is nan:
 df = df.dropna(subset=['ControlValue'])
 
 # counts = df['OnlySomePackets'].value_counts()
 
+
+test_band_0 = [111, 111] + [h for h in conv_set_band_bytes(0)]
+test_band_1 = [111, 111] + [h for h in conv_set_band_bytes(5)]
+test_band_2 = [111, 111] + [h for h in conv_set_band_bytes(10)]
+test_band_3 = [111, 111] + [h for h in conv_set_band_bytes(15)]
+test_band_4 = [111, 111] + [h for h in conv_set_band_bytes(120)]
+test_decoded = bytes_to_control_value([14, 198, 2, 51, 55, 56, 65, 50, 3])
 pass
 
 # grouped_packets = [

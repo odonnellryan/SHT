@@ -3,6 +3,7 @@ StrongHoldTelephone
 """
 import datetime
 import os
+import subprocess
 import threading
 
 import toga
@@ -33,7 +34,7 @@ class WebServerThread(threading.Thread):
             if self.server is not None:
                 self.mobile_app.message_box.value += "Server already running.\n"
                 return
-
+            StreamHandler.tcpdump_path = self.mobile_app.get_tcpdump_path()
             StreamHandler.start_tcpdump()
             app = make_app()
             port = int(self.mobile_app.port_input.value)
@@ -76,6 +77,23 @@ class WebServerThread(threading.Thread):
 
 
 class SHT(toga.App):
+
+    def get_tcpdump_path(self):
+        binary_path = os.path.join(Paths().app, "resources", "tcpdump")
+        target_path = "/data/local/tmp/tcpdump"
+        try:
+            subprocess.run(["su", "-c", "tcpdump", "--version"], stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL,
+                           check=True)
+            return "tcpdump"
+        except Exception:
+            if not os.path.exists(target_path):
+                subprocess.run(["su", "-c", f"cp {binary_path} {target_path}"], stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, check=True)
+            subprocess.run(["su", "-c", "chmod", "+x", target_path], stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, check=True)
+            return target_path
+
     def startup(self):
 
         self.http_server = None
@@ -84,28 +102,46 @@ class SHT(toga.App):
         self.server_thread = WebServerThread()
         self.server_thread.set_mobile_app(self)
 
+        def _perform_tcp_dump_check():
+            # self.message_box.value += f"TCP Dump Path: {self.get_tcpdump_path()}"
+            try:
+                subprocess.run(["su", "-c", f"{self.get_tcpdump_path()}", "--version"], stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL,
+                               check=True)
+                return True
+            except Exception:
+                self.message_box.value += "`tcpdump` command cannot be run. Install tcpdump on your system. \n"
+                return False
+
         def start_server(widget):
+            if not _perform_tcp_dump_check():
+                return
             self.server_thread.start()
 
         def stop_server(widget):
             self.server_thread.stop()
-            self.server_thread.join()
+            try:
+                self.server_thread.join()
+            except RuntimeError:
+                pass
 
         def _start_tcp_dump(widget):
+            if not _perform_tcp_dump_check():
+                return
             _stop_tcp_dump(widget)
             local_folder = get_local_folder()
             path = os.path.join(local_folder, "tcpdump.pcap")
             try:
-                self.message_box.value = f"TCP Dump started in: {path}.\n"
-                self.tcp_process = write_packets_to_file(path)
+                self.message_box.value += f"TCP Dump started in: {path}.\n"
+                self.tcp_process = write_packets_to_file(path, self.get_tcpdump_path())
             except Exception as e:
-                self.message_box.value = f"Error starting TCP Dump: {e}\n"
+                self.message_box.value += f"Error starting TCP Dump: {e}\n"
 
         def _stop_tcp_dump(widget):
             if hasattr(self, 'tcp_process') and self.tcp_process is not None:
                 self.tcp_process.terminate()
                 self.tcp_process = None
-                self.message_box.value = "TCP Dump stopped.\n"
+                self.message_box.value += "TCP Dump stopped.\n"
 
         main_box = toga.Box(style=Pack(direction=COLUMN))
 
@@ -127,6 +163,9 @@ class SHT(toga.App):
         input_box.add(stop_tcp_dump)
 
         self.message_box = toga.MultilineTextInput(readonly=True, style=Pack(flex=1, direction=COLUMN))
+
+        if _perform_tcp_dump_check():
+            self.server_thread.start()
 
         main_box.add(input_box)
         main_box.add(input_box)

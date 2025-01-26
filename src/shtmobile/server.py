@@ -14,9 +14,13 @@ import tornado.websocket
 try:
     from shtmobile.data_classes import Roaster
     from shtmobile.packet_utils import Packet
-except ImportError:
-    from src.shtmobile.data_classes import Roaster
-    from src.shtmobile.packet_utils import Packet
+except Exception:
+    try:
+        from data_classes import Roaster
+        from packet_utils import Packet
+    except (ImportError, ModuleNotFoundError):
+        from src.shtmobile.data_classes import Roaster
+        from src.shtmobile.packet_utils import Packet
 
 
 def process_reader(cls, pcap_reader):
@@ -41,11 +45,13 @@ def process_reader(cls, pcap_reader):
 
 
 def monitor_tcpdump(cls):
+    tcpdump_path = cls.tcpdump_path
+    if tcpdump_path is None:
+        tcpdump_path = 'tcpdump'
     while cls.tcpdump_running:
-
         try:
             cls.tcpdump_process = subprocess.Popen(
-                ["su", "-c", "tcpdump", "-i", "3", "-w", "-"],
+                ["su", "-c", f"{tcpdump_path}", "-i", "3", "-w", "-"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL
             )
@@ -61,18 +67,19 @@ def monitor_tcpdump(cls):
                 cls.tcpdump_process.terminate()
 
 
-def write_packets_to_file(file_path):
+def write_packets_to_file(file_path, tcpdump_path):
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
     def monitor_file_size(process, file_path):
         while process.poll() is None:  # Continue while the process is running
-            if os.path.getsize(file_path) > 2 * 1024 * 1024:  # 2 MB in bytes
+            if os.path.getsize(file_path) > 5 * 1024 * 1024:  # 5 MB in bytes
                 process.terminate()
                 break
             time.sleep(0.1)  # Check file size periodically
 
     with open(file_path, 'wb') as file:
         tcpdump_process = subprocess.Popen(
-            ["su", "-c", "tcpdump", "-i", "3", "-w", "-"],
+            ["su", "-c", f"{tcpdump_path}", "-i", "3", "-w", "-"],
             stdout=file,
             stderr=subprocess.DEVNULL
         )
@@ -85,22 +92,23 @@ def write_packets_to_file(file_path):
     return tcpdump_process
 
 
-# def mock_stream_from_file(cls):
-#     filename = "../../reference_files/tcp.pcap"
-#     while cls.tcpdump_running:
-#         try:
-#             with open(filename, "rb") as f:
-#                 pcap_reader = dpkt.pcap.Reader(f)
-#                 process_reader(cls, pcap_reader)
-#             print("End of file reached. Restarting...")
-#         except Exception as e:
-#             print(f"Error reading file: {e}")
+def mock_stream_from_file(cls):
+    filename = "../../reference_files/tcp.pcap"
+    while cls.tcpdump_running:
+        try:
+            with open(filename, "rb") as f:
+                pcap_reader = dpkt.pcap.Reader(f)
+                process_reader(cls, pcap_reader)
+            print("End of file reached. Restarting...")
+        except Exception as e:
+            print(f"Error reading file: {e}")
 
 
 class StreamHandler(tornado.websocket.WebSocketHandler):
     roaster = Roaster()
     tcpdump_process = None
     tcpdump_running = True
+    tcpdump_path = None
 
     def check_origin(self, origin):
         return True
@@ -109,6 +117,8 @@ class StreamHandler(tornado.websocket.WebSocketHandler):
 
     def open(self):
         StreamHandler.clients.add(self)
+        # if not hasattr(self, 'poller') and len(StreamHandler.clients) == 1:
+        #     self.start_polling()
 
     @classmethod
     def start_tcpdump(cls):
@@ -130,6 +140,21 @@ class StreamHandler(tornado.websocket.WebSocketHandler):
 
     def on_close(self):
         StreamHandler.clients.remove(self)
+        # if not StreamHandler.clients:
+        #     self.stop_polling()
+
+    # def start_polling(self):
+    #     self.poller = tornado.ioloop.PeriodicCallback(self.poll_condition, 250)  # Every 250ms
+    #     self.poller.start()
+    #
+    # def stop_polling(self):
+    #     if hasattr(self, 'poller'):
+    #         self.poller.stop()
+    #
+    # def poll_condition(self):
+    #     if self.roaster.has_dropped_roast():
+    #         for client in StreamHandler.clients:
+    #             client.write_message({"pushMessage": "drop"})
 
 
 def make_app():
@@ -142,6 +167,7 @@ def main():
     tornado.log.enable_pretty_logging()
     while True:
         try:
+            StreamHandler.tcpdump_path = 'tcpdump'
             StreamHandler.start_tcpdump()
             app = make_app()
             port = 60112
