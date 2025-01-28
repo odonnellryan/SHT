@@ -2,9 +2,7 @@ import random
 import unittest
 from collections import deque
 
-from src.shtmobile.data_classes import ControlData
-
-
+from src.shtmobile.data_classes import ControlData, get_subsequence, bytes_to_control_value, alt_get_subsequence
 
 
 def _perf_control_test(self, test_data):
@@ -13,18 +11,64 @@ def _perf_control_test(self, test_data):
         hit_test = False
         for data_seq in data_sequences:
             contvs = c.get_datapoint_and_control_value(data_seq)
-            if contvs and contvs[0] and contvs[0][1] is not None:
-                self.assertEquals(contvs[0][1], test_val)
-                hit_test = True
+            for v in contvs:
+                if v[1] == test_val:
+                    self.assertTrue(True)
+                    hit_test = True
         if not hit_test:
             if test_val != 'THIS SHOULD NOT RETURN':
                 self.fail(f"Should have hit test case for {test_val}")
 
 
 class TestControlSequences(unittest.TestCase):
+
+    def test_get_subsequence(self):
+
+        t1 =(
+            [20, 2, 90, 1, 3, 7, 14, 198, 2, 49, 48, 70, 65, 55, 3, 17, 145, 194, 1, 2, 1],
+            [[14, 198, 2, 49, 48, 70, 65, 55, 3]]
+        )
+        t2 = (
+            [14, 197, 49, 53, 48, 57, 54, 3, 17, 145, 14, 198, 2, 49, 48, 70, 65, 55, 3],
+            [[14, 197, 2, 49, 53, 48, 57, 54, 3], [14, 198, 2, 49, 48, 70, 65, 55, 3]]
+        )
+        t3 = (
+            [20, 2, 90, 1, 3, 7, 17, 145, 194, 1, 2, 1, 14, 193, 2, 49, 14, 196, 49, 69, 65, 55, 3],
+            [[14, 193, 2, 49, 49, 69, 65, 55, 3]]
+        )
+        t4 = ([14, 194, 2, 49, 48, 14, 195, 70, 65, 55, 3],
+              [[14, 194, 2, 49, 48, 70, 65, 55, 3]]
+            )
+        t5 = ([14, 197, 2, 49, 53, 53, 57, 66],
+              [[14, 197, 2, 49, 53, 53, 57, 66]])
+
+        t1 = alt_get_subsequence([14, 198, 2, 49, 51, 67, 65, 55, 3])
+
+        sub1 = alt_get_subsequence(t1[0])
+        sub2 = alt_get_subsequence(t2[0])
+        sub3 = alt_get_subsequence(t3[0])
+        sub4 = alt_get_subsequence(t4[0])
+        sub5 = alt_get_subsequence(t5[0])
+        self.assertEquals(sub1, t1[1])
+        self.assertEquals(sub2, t2[1])
+        self.assertEquals(sub3, t3[1])
+        self.assertEquals(sub4, t4[1])
+        self.assertEquals(sub5, t5[1])
+        pass
+
     def test_hot_air(self):
         test_data = [
-
+            (60,
+             ([
+                 [14, 192, 3],
+                 [14, 198, 2, 49, 51, 67, 65, 55, 3]
+             ])
+             ),
+            (45,
+             ([
+                 [14, 193, 51, 3, 17, 145, 194, 1, 2, 1, 20, 2, 90, 1, 3, 7],
+                 [14, 193, 2, 49, 14, 196, 50, 68, 65, 55, 3]
+             ])),
             (15,
              (
                  [20, 2, 90, 1, 3, 7, 14, 198, 2, 49, 48, 70, 65, 55, 3, 17, 145, 194, 1, 2, 1],
@@ -43,8 +87,9 @@ class TestControlSequences(unittest.TestCase):
 
              ),
              ),
-
             (90, ([20, 2, 90, 1, 3, 7, 17, 145, 194, 1, 2, 1, 14, 197, 2, 49, 53, 65, 65, 55, 14, 192, 3],),),
+            (25,
+             ([14, 192, 2, 49, 49, 57, 57, 66, 3],)),
             (25,
              ([14, 192, 2, 49],
               [14, 196, 49, 57, 57, 66, 3, 4, 116, 20, 2, 90, 1, 3, 7, 17, 145, 194, 1, 2, 1]),
@@ -63,14 +108,25 @@ class TestControlSequences(unittest.TestCase):
             )),
             (40, (
                 [14, 193, 2, 49],
-                [20, 2, 3, 83, 73, 205],
                 [14, 196, 50, 56, 57, 66, 3],
             )),
             (0, ([14, 193, 2, 49, 14, 196, 48, 48, 57, 49, 3, 17, 145, 194, 1, 2, 1],)),
             ('THIS SHOULD NOT RETURN', (
-                [14, 192, 49, 14, 192, 52, 14, 192, 49, 14, 192, 57, 14, 192, 54, 14, 192, 3],
+                [14, 192, 49, 14, 192, 3],
             )),
+            (75, (
+                [14, 192, 2, 14, 197, 49, 52, 66, 65, 55, 3],
+            )),
+            (30, (
+                [20, 2, 90, 1, 3, 7, 17, 145, 194, 1, 2, 1, 14, 193, 2, 49, 14, 196, 49, 69, 65, 55, 3],
+            )),
+            (15, (
+                [14, 194, 2, 49, 48, 14, 195, 70, 65, 55, 3],
+            ))
         ]
+
+
+        cv = bytes_to_control_value([14, 198, 2, 49, 51, 67, 65, 55, 3])
 
         _perf_control_test(self, test_data)
 

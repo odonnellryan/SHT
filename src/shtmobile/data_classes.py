@@ -41,38 +41,92 @@ def get_second_sequence_indexes_if_exists(sub_sequence, check_sequences):
 
 
 def get_control_sequences(values):
-    sequence_checkers = (
-        (2, 51),
-        (2, 49),
-        (2, 50),
-        (2, 77),
-    )
     sub_sequences = []
     try:
-        for i, v in enumerate(values):
-            for sequence in sequence_checkers:
-                if v == sequence[0] and values[i + 1] == sequence[1]:
-                    stop_index = 7
-                    sub_val = values[i - 2:i + 6]
-                    try:
-                        error_byte = values[i + 6]
-                    except IndexError:
-                        error_byte = None
-                    if error_byte == 3:
-                        sub_val.append(error_byte)
-                        stop_index += 1
-                    index = get_second_sequence_indexes_if_exists(sub_val, sequence_checkers)
-                    if index is not None:
-                        first_index = index
-                        sub_val.pop(first_index)
-                        sub_val.pop(first_index)
-                        sub_val.append(values[i + 6])
-                        sub_val.append(values[i + 7])
-                    sub_sequences.append(sub_val)
-                    values = values[i + stop_index:]
+        sub_sequences.extend(alt_get_subsequence(values))
     except IndexError:
         return sub_sequences
-    return [sub_sequences]
+    return sub_sequences
+
+
+def check_for_19star(v):
+    return str(v).startswith("19") and len(str(v)) == 3
+
+
+def add_twos_to_return_sequences(sequences):
+    return_sequences = []
+    for seq in sequences:
+        if seq[0] == 14 and check_for_19star(seq[1]) and seq[2] != 2:
+            return_sequences.append(
+                seq[:2] + [2] + seq[2:]
+            )
+        else:
+            return_sequences.append(seq)
+
+    return return_sequences
+
+def alt_get_subsequence(sequence):
+    return_sequences = []
+
+    i = 0
+    while i < len(sequence):
+
+        hit_endbyte = True
+        v = []
+        try:
+            if (sequence[i] == 14 and check_for_19star(sequence[i + 1])) or (sequence[i] == 9 and sequence[i+1] == 32):
+                v.extend([sequence[i], sequence[i + 1]])
+                hit_endbyte = False
+        except IndexError:
+            continue
+        while not hit_endbyte:
+            try:
+                if sequence[i] == 14 and check_for_19star(sequence[i + 1]):
+                    i += 2
+                if sequence[i] == 3:
+                    hit_endbyte = True
+                v.append(sequence[i])
+                i += 1
+            except IndexError:
+                hit_endbyte = True
+        if v:
+            return_sequences.append(v)
+        i += 1
+    return add_twos_to_return_sequences(return_sequences)
+
+
+def get_subsequence(sub_sequences):
+    check_values = [
+        51,
+        49,
+        50,
+    ]
+
+    cleaned_values = []
+    i = 0
+    counter = 0
+
+    while i < len(sub_sequences):
+        if sub_sequences[i] == 14 and check_for_19star(sub_sequences[i + 1]):
+            if cleaned_values:
+                cleaned_values[-1] = cleaned_values[-1][0:counter]
+
+            if cleaned_values and (len(cleaned_values[-1]) == 4 or len(cleaned_values[-1]) == 5):
+                if cleaned_values[-1][-1] in check_values and sub_sequences[i] == 14 and check_for_19star(
+                        sub_sequences[i + 1]):
+                    cleaned_values[-1] += sub_sequences[i + 2:]
+                elif sub_sequences[i + 2] not in check_values:
+                    cleaned_values[-1] += sub_sequences[i + 2:]
+                else:
+                    cleaned_values[-1] += sub_sequences[i:]
+            else:
+                if not sub_sequences[i + 2] == 2:
+                    sub_sequences = sub_sequences[:i + 2] + [2] + sub_sequences[i + 2:]
+                cleaned_values.append(sub_sequences[i:])
+                counter = 0
+        i += 1
+        counter += 1
+    return cleaned_values
 
 
 def bytes_to_int_array(byte_sequence):
@@ -224,29 +278,32 @@ class ControlData:
     def get_datapoint_and_control_value(self, data_array):
         try:
             data_array = bytes_to_int_array(data_array)
+
+            # if self._prev_val and len(self._prev_val) == 4 and data_array[0] == 14 and str(data_array[1]).startswith(
+            #         "19") and data_array[2] != 2:
+
+            if self._prev_val is not None:
+                data_array = self._prev_val + data_array
+            else:
+                if data_array[0] == 14 and check_for_19star(data_array[1]):
+                    self._prev_val = data_array
+
             control_sequences = get_control_sequences(data_array)
 
-            if data_array[0] == 9 and data_array[1] == 32 and not (control_sequences and control_sequences[0]):
-                drum_steps = calculate_drum_steps(data_array)
-                self.drum_speed.append(drum_steps)
-                return []
-
-            if not control_sequences or not control_sequences[0]:
-                if self._prev_val:
-                    data_array = get_continuation_array(data_array, self._prev_val)
-                    data_array = self._prev_val + data_array
-                    control_sequences = get_control_sequences(data_array)
-
-            if data_array[0] == 14:
-                self._prev_val = data_array
-
             rv = []
+
+            if any(c[-1] == 3 for c in control_sequences):
+                self._prev_val = None
+
             for c in control_sequences:
-                try:
-                    key_bytes = (c[2], c[3])
-                except IndexError:
-                    return []
-                rv.append((key_bytes, bytes_to_control_value(c)))
+                if c[0] == 9 and c[1] == 32:
+                    self.drum_speed.append(calculate_drum_steps(c))
+                else:
+                    try:
+                        key_bytes = (c[2], c[3])
+                    except IndexError:
+                        continue
+                    rv.append((key_bytes, bytes_to_control_value(c)))
             try:
                 if rv and any([r[1] is not None for r in rv]):
                     self._prev_val = None

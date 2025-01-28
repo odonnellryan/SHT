@@ -7,7 +7,7 @@ from src.shtmobile.data_classes import ControlData, bytes_to_control_value
 
 # from src.shtmobile.data_classes import bytes_to_control_value, get_control_sequences
 
-file_path = "sent_controls.txt"
+file_path = "sent.txt"
 
 with open(file_path, "r") as f:
     raw_data = f.read()
@@ -100,7 +100,7 @@ def get_control_value(x):
         cv = c.get_datapoint_and_control_value(x)[0]
     except Exception:
         return None
-    if cv and cv[0] and 51 in cv[0]:
+    if cv and cv[0] and 49 in cv[0]:
         return cv
     return None
 
@@ -124,7 +124,7 @@ df['ControlValue'] = df['Packet'].apply(
     lambda x: get_control_value(x))
 
 # drop rows where ControlValue is nan:
-df = df.dropna(subset=['ControlValue'])
+# df = df.dropna(subset=['ControlValue'])
 
 # counts = df['OnlySomePackets'].value_counts()
 
@@ -136,6 +136,9 @@ test_band_3 = [111, 111] + [h for h in conv_set_band_bytes(15)]
 test_band_4 = [111, 111] + [h for h in conv_set_band_bytes(120)]
 test_decoded = bytes_to_control_value([14, 198, 2, 51, 55, 56, 65, 50, 3])
 pass
+
+
+# 6842 - 7229
 
 # grouped_packets = [
 #     df.iloc[i:i + 100] for i in range(0, len(df), 100)
