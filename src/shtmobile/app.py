@@ -103,7 +103,6 @@ class SHT(toga.App):
         self.server_thread.set_mobile_app(self)
 
         def _perform_tcp_dump_check():
-            # self.message_box.value += f"TCP Dump Path: {self.get_tcpdump_path()}"
             try:
                 subprocess.run(["su", "-c", f"{self.get_tcpdump_path()}", "--version"], stdout=subprocess.DEVNULL,
                                stderr=subprocess.DEVNULL,
