@@ -140,11 +140,11 @@ class StreamHandler(tornado.websocket.WebSocketHandler):
 
     def on_close(self):
         StreamHandler.clients.remove(self)
-        # if not StreamHandler.clients:
-        #     self.stop_polling()
-
+    #     if not StreamHandler.clients:
+    #         self.stop_polling()
+    #
     # def start_polling(self):
-    #     self.poller = tornado.ioloop.PeriodicCallback(self.poll_condition, 250)  # Every 250ms
+    #     self.poller = tornado.ioloop.PeriodicCallback(self.poll_condition, 100)
     #     self.poller.start()
     #
     # def stop_polling(self):

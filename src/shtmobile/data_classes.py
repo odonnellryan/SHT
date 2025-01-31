@@ -1,4 +1,5 @@
 import math
+import time
 from collections import deque
 from datetime import datetime
 
@@ -12,6 +13,36 @@ except Exception:
         from packet_utils import Packet
     except ImportError:
         from src.shtmobile.packet_utils import Packet
+
+
+class TimeBasedQueue(deque):
+    def __init__(self, min_interval=100, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.min_interval = min_interval * 1_000_000
+        self.max_gap = 100 * 1_000_000
+        self.last_logged_time = 0
+        self.last_value = None
+
+    def append(self, item):
+        current_time = time.time_ns()
+
+        if self.last_logged_time and current_time - self.last_logged_time > self.max_gap:
+            gap = current_time - self.last_logged_time
+            num_interpolations = (gap // self.min_interval) - 1
+            for i in range(1, num_interpolations + 1):
+                interpolated_time = self.last_logged_time + i * self.min_interval
+                interpolated_value = self._interpolate(self.last_value, item, i, num_interpolations + 1)
+                super().append((interpolated_time, interpolated_value))
+
+        if current_time - self.last_logged_time >= self.min_interval:
+            super().append((current_time, item))
+            self.last_logged_time = current_time
+            self.last_value = item
+
+    def _interpolate(self, start_value, end_value, step, total_steps):
+        if start_value is None:
+            return end_value
+        return start_value + (end_value - start_value) * (step / total_steps)
 
 
 def check_for_second_sequence(sub_sequence):
@@ -65,6 +96,12 @@ def add_twos_to_return_sequences(sequences):
 
     return return_sequences
 
+
+def check_beginning_sequence(sequence, i):
+    return (sequence[i] == 14 and check_for_19star(sequence[i + 1])) or (
+            sequence[i] == 9 and sequence[i + 1] == 32)
+
+
 def alt_get_subsequence(sequence):
     return_sequences = []
 
@@ -74,14 +111,14 @@ def alt_get_subsequence(sequence):
         hit_endbyte = True
         v = []
         try:
-            if (sequence[i] == 14 and check_for_19star(sequence[i + 1])) or (sequence[i] == 9 and sequence[i+1] == 32):
+            if check_beginning_sequence(sequence, i):
                 v.extend([sequence[i], sequence[i + 1]])
                 hit_endbyte = False
         except IndexError:
             continue
         while not hit_endbyte:
             try:
-                if sequence[i] == 14 and check_for_19star(sequence[i + 1]):
+                if check_beginning_sequence(sequence, i):
                     i += 2
                 if sequence[i] == 3:
                     hit_endbyte = True
@@ -212,8 +249,8 @@ def add_to_datapoints(cls, sensor_id, value):
     try:
         cls.mapper[sensor_id].append(value)
     except KeyError:
-        return False
-    return True
+        return
+    return
 
 
 def calculate_drum_steps(arry):
@@ -233,7 +270,7 @@ def calculate_drum_steps(arry):
     return val
 
 
-MAX_QUEUE_SIZE = 30
+MAX_QUEUE_SIZE = 100
 
 
 def get_continuation_array(sequence, prior_array):
@@ -252,13 +289,11 @@ class ControlData:
         self.drum_heater = deque(maxlen=MAX_QUEUE_SIZE)
         self.hot_air = deque(maxlen=MAX_QUEUE_SIZE)
         self.halogen = deque(maxlen=MAX_QUEUE_SIZE)
-        self.monitor = deque(maxlen=MAX_QUEUE_SIZE)
         self.drum_speed = deque(maxlen=MAX_QUEUE_SIZE)
         self.mapper = {
             (2, 51): self.drum_heater,
             (2, 49): self.hot_air,
             (2, 50): self.halogen,
-            (2, 77): self.monitor
         }
         self._prev_val = None
 
@@ -271,16 +306,12 @@ class ControlData:
             f"  drum_heater: {format_last_values(self.drum_heater)},\n"
             f"  hot_air: {format_last_values(self.hot_air)},\n"
             f"  halogen: {format_last_values(self.halogen)},\n"
-            f"  monitor: {format_last_values(self.monitor)}\n"
             f")"
         )
 
     def get_datapoint_and_control_value(self, data_array):
         try:
             data_array = bytes_to_int_array(data_array)
-
-            # if self._prev_val and len(self._prev_val) == 4 and data_array[0] == 14 and str(data_array[1]).startswith(
-            #         "19") and data_array[2] != 2:
 
             if self._prev_val is not None:
                 data_array = self._prev_val + data_array
@@ -308,18 +339,18 @@ class ControlData:
                 if rv and any([r[1] is not None for r in rv]):
                     self._prev_val = None
             except IndexError:
-                pass
+                print("i1")
             return rv
 
         except IndexError:
-            pass
+            print("i1")
 
         return []
 
     def add_datapoint_from_bytes(self, b):
         for key_bytes, control_value in self.get_datapoint_and_control_value(b):
             if control_value is not None:
-                return add_to_datapoints(self, key_bytes, control_value)
+                add_to_datapoints(self, key_bytes, control_value)
 
 
 class SensorData:
@@ -330,8 +361,22 @@ class SensorData:
         self.hot_air = deque(maxlen=MAX_QUEUE_SIZE)
         self.drum = deque(maxlen=MAX_QUEUE_SIZE)
         self.cooling = deque(maxlen=MAX_QUEUE_SIZE)
+
         self.ir = deque(maxlen=MAX_QUEUE_SIZE)
         self.ir_ambient = deque(maxlen=MAX_QUEUE_SIZE)
+
+        self.time_storage = TimeBasedQueue(maxlen=MAX_QUEUE_SIZE)
+        self.time_exhaust = TimeBasedQueue(maxlen=MAX_QUEUE_SIZE)
+        self.time_hot_air = TimeBasedQueue(maxlen=MAX_QUEUE_SIZE)
+        self.time_drum = TimeBasedQueue(maxlen=MAX_QUEUE_SIZE)
+        self.time_ir = TimeBasedQueue(maxlen=MAX_QUEUE_SIZE)
+
+        self.time_mapper = {
+            18: self.time_hot_air,
+            8: self.time_exhaust,
+            9: self.time_storage,
+            17: self.time_drum
+        }
 
         self.mapper = {
             18: self.hot_air,
@@ -363,27 +408,35 @@ class SensorData:
 
             if data_array[0] == 20:
                 ir_temp = convert_ir_to_temperature(data_array)
+                if self.drum and self.drum[-1] and abs(self.drum[-1] - ir_temp) < 10:
+                    self.ir.append(ir_temp)
+                    self.time_ir.append(ir_temp)
+                    return
                 if ir_temp and ir_temp <= 100:
                     self.ir_ambient.append(ir_temp)
-                    return False
+                    return
                 if ir_temp:
                     self.ir.append(ir_temp)
-                    return False
+                    self.time_ir.append(ir_temp)
+                    return
             else:
                 first, second = data_array[0], data_array[1]
                 if not (first == 17 and second == 129):
-                    return False
+                    return
                 temp = decode_rtd_row(data_array, 400)
 
                 if temp:
                     sensor_id = data_array[2]
-                    v = add_to_datapoints(self, sensor_id, temp)
-
-                    return v
+                    add_to_datapoints(self, sensor_id, temp)
+                    try:
+                        self.time_mapper[sensor_id].append(temp)
+                    except KeyError:
+                        pass
+                    return
 
         except IndexError:
             pass
-        return False
+        return
 
 
 def convert_to_datetime(timestamp_str):
@@ -397,13 +450,41 @@ class Roaster:
         self.sensor_data = SensorData()
 
     def has_dropped_roast(self):
-        ir_temp = self.sensor_data.ir
-
-        if ir_temp[-1] < 120:
+        # sensor_data.time_storage = TimeBasedQueue(maxlen=MAX_QUEUE_SIZE)
+        # sensor_data.time_exhaust = TimeBasedQueue(maxlen=MAX_QUEUE_SIZE)
+        # sensor_data.time_hot_air = TimeBasedQueue(maxlen=MAX_QUEUE_SIZE)
+        # sensor_data.time_drum = TimeBasedQueue(maxlen=MAX_QUEUE_SIZE)
+        # sensor_data.time_ir = TimeBasedQueue(maxlen=MAX_QUEUE_SIZE)
+        # max queue size is 100, items are 100ms apart
+        #
+        # this should return true if all the following conditions are met, and if there are at least
+        # 100 items in each of the sensors EXCEPT ir - we don't need IR to be full (but it needs to have some values)
+        # 1) a major spike/increase in the storage temp, a degree in less than a second
+        # 2) self.control_data.hot_air is set to 0 or None, when it had a prior value
+        # 3) rapid decline in exhaust temp, a degree in less than a second
+        # 4) almost immediate drop in IR temp, 2 degrees in less than a second
+        if not all(len(queue) >= MAX_QUEUE_SIZE for queue in [
+            self.sensor_data.time_storage,
+            self.sensor_data.time_exhaust,
+            self.sensor_data.time_hot_air,
+            self.sensor_data.time_drum
+        ]) or not len(self.sensor_data.time_ir) > 5:
             return False
 
-        if len(ir_temp) < ir_temp.maxlen:
+        if self.sensor_data.time_storage[-1] - self.sensor_data.time_storage[-6] < 1:
             return False
+
+        if self.control_data.hot_air and self.control_data.hot_air[-1] != 0 and any(
+                v > 0 for v in self.control_data.hot_air):
+            return False
+
+        if self.sensor_data.time_exhaust[-6] - self.sensor_data.time_exhaust[-1] < 1:
+            return False
+
+        if self.sensor_data.time_ir[-4] - self.sensor_data.time_ir[-1] < 2:
+            return False
+
+        return True
 
     def add_data_packet(self, data_packet: Packet):
         if data_packet.is_sending:
@@ -432,6 +513,5 @@ class Roaster:
             'Drum Heater': round(self.control_data.drum_heater[-1], 2) if self.control_data.drum_heater else 0,
             'Hot Air Control': round(self.control_data.hot_air[-1], 2) if self.control_data.hot_air else 0,
             'Halogen Control': round(self.control_data.halogen[-1], 2) if self.control_data.halogen else 0,
-            'Monitor Control': round(self.control_data.monitor[-1], 2) if self.control_data.monitor else 0,
             'Drum Speed': round(self.control_data.drum_speed[-1], 2) if self.control_data.drum_speed else 0,
         }

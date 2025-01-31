@@ -7,7 +7,7 @@ from src.shtmobile.data_classes import ControlData, bytes_to_control_value
 
 # from src.shtmobile.data_classes import bytes_to_control_value, get_control_sequences
 
-file_path = "sent.txt"
+file_path = "sent_carray.txt"
 
 with open(file_path, "r") as f:
     raw_data = f.read()
@@ -63,7 +63,7 @@ for item in range(190, 200):
     check_controls_all.append((14, item))
 
 sequence_checkers = (
-    (2, 50),
+    (9, 32),
 )
 
 
@@ -85,9 +85,9 @@ def check_starts_with_seq(lst, seqs):
     return any([lst[:len(seq)] == list(seq) for seq in seqs])
 
 
-# df['OnlySomePackets'] = df["Packet"].apply(
-#     lambda x: x if isinstance(x, list) and x[0] not in (17, 20, 4) else None
-# )
+df['OnlySomePackets'] = df["Packet"].apply(
+    lambda x: x if isinstance(x, list) and check_starts_with_seq(x, sequence_checkers) else None
+)
 # df = df.dropna(subset=['OnlySomePackets'])
 
 
@@ -97,12 +97,16 @@ c = ControlData()
 
 def get_control_value(x):
     try:
-        cv = c.get_datapoint_and_control_value(x)[0]
-    except Exception:
+        cv = c.get_datapoint_and_control_value(x)
+    except Exception as e:
+        pass
+    try:
+        return c.drum_speed[-1]
+    except IndexError:
         return None
-    if cv and cv[0] and 49 in cv[0]:
-        return cv
-    return None
+    # if cv and cv[0]:
+    #     return cv
+    # return None
 
 
 def bytes_to_control_value(byte_sequence):
@@ -128,6 +132,7 @@ df['ControlValue'] = df['Packet'].apply(
 
 # counts = df['OnlySomePackets'].value_counts()
 
+# 23088 - 23138
 
 test_band_0 = [111, 111] + [h for h in conv_set_band_bytes(0)]
 test_band_1 = [111, 111] + [h for h in conv_set_band_bytes(5)]
